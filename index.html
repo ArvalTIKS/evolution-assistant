@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Multi-Tenant WhatsApp</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 20px; }
+        .qr-code { max-width: 300px; }
+        #chat-log { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
+        .section { margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center my-4">Panel Multi-Tenant WhatsApp</h1>
+
+        <!-- Sección Admin -->
+        <div class="section">
+            <h2>Panel de Administración</h2>
+            <!-- Crear Cliente -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Crear Cliente</h5>
+                    <form id="create-client-form">
+                        <div class="mb-3">
+                            <label for="client-email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="client-email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="instance-id" class="form-label">ID de Instancia</label>
+                            <input type="text" class="form-control" id="instance-id" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Crear</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Lista de Clientes -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Clientes</h5>
+                    <table class="table" id="clients-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Email</th>
+                                <th>Instancia</th>
+                                <th>Activo</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección Cliente -->
+        <div class="section">
+            <h2>Panel de Cliente</h2>
+            <!-- Solicitar QR -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Solicitar Código QR</h5>
+                    <div class="mb-3">
+                        <label for="client-instance-id" class="form-label">ID de Instancia</label>
+                        <input type="text" class="form-control" id="client-instance-id" required>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="requestQR()">Solicitar QR</button>
+                    <div id="qr-code" class="mt-3"></div>
+                </div>
+            </div>
+
+            <!-- Estado en Tiempo Real -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Estado de la Instancia</h5>
+                    <div class="mb-3">
+                        <label for="status-instance-id" class="form-label">ID de Instancia</label>
+                        <input type="text" class="form-control" id="status-instance-id" required>
+                    </div>
+                    <button type="button" class=" btn-primary" onclick="checkStatus()">Ver Estado</button>
+                    <p id="status-result" class="mt-3"></p>
+                </div>
+            </div>
+
+            <!-- Chats -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Chats en Tiempo Real</h5>
+                    <div id="chat-log"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS y Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const API_URL = "http://localhost:8000";
+
+        // Cargar lista de clientes
+        async function loadClients() {
+            try {
+                const response = await axios.get(`${API_URL}/admin/clients`);
+                const tbody = document.querySelector("#clients-table tbody");
+                tbody.innerHTML = "";
+                response.data.clients.forEach(client => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${client.id}</td>
+                        <td>${client.email}</td>
+                        <td>${client.instance_id}</td>
+                        <td>${client.is_active ? "Activo" : "Inactivo"}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="toggleClient(${client.id}, ${!client.is_active})">
+                                ${client.is_active ? "Desactivar" : "Activar"}
+                            </button>
+                            <button class="btn btn-sm btn-warning" onclick="editClient(${client.id}, '${client.email}')">Editar</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteClient(${client.id})">Eliminar</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                alert("Error al cargar clientes: " + error.message);
+            }
+        }
+
+        // Crear cliente
+        document.getElementById("create-client-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const email = document.getElementById("client-email").value;
+            const instanceId = document.getElementById("instance-id").value;
+            try {
+                await axios.post(`${API_URL}/admin/clients`, { email, instance_id: instanceId });
+                alert("Cliente creado con éxito");
+                document.getElementById("create-client-form").reset();
+                loadClients();
+            } catch (error) {
+                alert("Error al crear cliente: " + error.response?.data?.detail || error.message);
+            }
+        });
+
+        // Activar/Desactivar cliente
+        async function toggleClient(clientId, isActive) {
+            try {
+                await axios.post(`${API_URL}/admin/clients/${clientId}/toggle`, {}, { params: { is_active: isActive } });
+                alert(`Cliente ${isActive ? "activado" : "desactivado"}`);
+                loadClients();
+            } catch (error) {
+                alert("Error al cambiar estado: " + error.response?.data?.detail || error.message);
+            }
+        }
+
+        // Editar cliente
+        async function editClient(clientId, currentEmail) {
+            const email = prompt("Nuevo email:", currentEmail);
+            if (email) {
+                try {
+                    await axios.put(`${API_URL}/admin/clients/${clientId}`, { email });
+                    alert("Cliente actualizado");
+                    loadClients();
+                } catch (error) {
+                    alert("Error al editar cliente: " + error.response?.data?.detail || error.message);
+                }
+            }
+        }
+
+        // Eliminar cliente
+        async function deleteClient(clientId) {
+            if (confirm("¿Seguro que quieres eliminar este cliente?")) {
+                try {
+                    await axios.delete(`${API_URL}/admin/clients/${clientId}`);
+                    alert("Cliente eliminado");
+                    loadClients();
+                } catch (error) {
+                    alert("Error al eliminar cliente: " + error.response?.data?.detail || error.message);
+                }
+            }
+        }
+
+        // Solicitar QR
+        async function requestQR() {
+            const instanceId = document.getElementById("client-instance-id").value;
+            try {
+                const response = await axios.get(`${API_URL}/client/${instanceId}/qr`);
+                const qrCode = response.data.qr_code;
+                document.getElementById("qr-code").innerHTML = `<img src="${qrCode}" class="qr-code" alt="Código QR">`;
+            } catch (error) {
+                alert("Error al obtener QR: " + error.response?.data?.detail || error.message);
+            }
+        }
+
+        // Ver estado
+        async function checkStatus() {
+            const instanceId = document.getElementById("status-instance-id").value;
+            try {
+                const response = await axios.get(`${API_URL}/client/${instanceId}/status`);
+                document.getElementById("status-result").innerText = `Estado: ${response.data.status}`;
+            } catch (error) {
+                alert("Error al obtener estado: " + error.response?.data?.detail || error.message);
+            }
+        }
+
+        // Simular chats en tiempo real (usando WebSocket o polling)
+        function startChatPolling() {
+            setInterval(async () => {
+                // Aquí puedes conectar con el webhook o una API que devuelva chats
+                // Por simplicidad, simulamos con un log estático
+                const chatLog = document.getElementById("chat-log");
+                chatLog.innerHTML += `<p>[${new Date().toLocaleTimeString()}] Mensaje simulado recibido</p>`;
+                chatLog.scrollTop = chatLog.scrollHeight;
+            }, 5000);
+        }
+
+        // Inicializar
+        loadClients();
+        startChatPolling();
+    </script>
+</body>
+</html>
